@@ -2,6 +2,9 @@ site:
   title: "OpenShift RBAC Demo"
   start_page: modules::index.adoc
 
+runtime:
+  fetch: true
+
 content:
   sources:
   - url: .
