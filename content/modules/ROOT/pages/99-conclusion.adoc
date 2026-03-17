@@ -100,7 +100,7 @@ Return to this table when closing the demo. Connect each row to a scenario the a
 
 . *Deploy it yourself*: The demo environment is ready to use.
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 git clone https://github.com/jlmayorga/openshift-demos
 cd openshift-demos/rbac-demo

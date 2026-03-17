@@ -25,14 +25,14 @@ The business impact: tenant teams own their own access management. Platform team
 
 . Log in as `cp-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u cp-admin -p "MobileCore2026!"
 ----
 
 . Verify what `cp-admin` can and cannot do:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i create rolebindings -n nf-control-plane     # <1>
 oc auth can-i create roles -n nf-control-plane            # <1>
@@ -44,7 +44,7 @@ oc auth can-i create clusterrolebindings                  # <2>
 
 . Grant a contractor temporary view access:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc create rolebinding contractor-temp \
   --clusterrole=view \
@@ -54,7 +54,7 @@ oc create rolebinding contractor-temp \
 
 . Verify the grant took effect immediately:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i list pods --as=external-contractor -n nf-control-plane   # <1>
 oc auth can-i list pods --as=external-contractor -n nf-user-plane      # <2>
@@ -64,7 +64,7 @@ oc auth can-i list pods --as=external-contractor -n nf-user-plane      # <2>
 
 . Attempt to escalate -- try to grant `cluster-admin` to the contractor:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc create rolebinding escalation-attempt \
   --clusterrole=cluster-admin \
@@ -76,7 +76,7 @@ Expected output: `Error: user "cp-admin" is not allowed to bind ClusterRole "clu
 
 . Clean up the contractor binding:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc delete rolebinding contractor-temp -n nf-control-plane
 ----
@@ -104,7 +104,7 @@ With a Group, one binding covers all members. Offboarding is `oc adm groups remo
 
 . Log in as `platform-admin` to inspect the custom role:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 oc describe role nf-operator -n nf-control-plane
@@ -112,7 +112,7 @@ oc describe role nf-operator -n nf-control-plane
 
 . Use `oc auth can-i` to map the permission matrix:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i update deployments --as=cp-operator -n nf-control-plane   # <1>
 oc auth can-i get pods/log --as=cp-operator -n nf-control-plane         # <1>
@@ -125,7 +125,7 @@ oc auth can-i get pods --as=cp-operator -n nf-user-plane                # <2>
 
 . Use the reverse-lookup command (useful after an incident):
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc adm policy who-can delete pods -n nf-control-plane
 # → Lists every user, group, and service account that can delete pods here
@@ -133,7 +133,7 @@ oc adm policy who-can delete pods -n nf-control-plane
 
 . Log in as `cp-operator` and demonstrate live:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u cp-operator -p "MobileCore2026!"
 
@@ -146,7 +146,7 @@ oc delete deployment smf -n nf-control-plane              # <2>
 
 . Scale back to the original replica count:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc scale deployment amf --replicas=2 -n nf-control-plane
 ----

@@ -183,7 +183,7 @@ All demo users share the password `MobileCore2026!`.
 
 Run these before starting the demo:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 cd rbac-demo/
 ./scripts/deploy.sh
@@ -194,7 +194,7 @@ Then open the web console and navigate to: *Administrator -> User Management -> 
 
 Confirm workloads are running:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-control-plane
 oc get pods -n nf-user-plane
@@ -207,7 +207,7 @@ oc get pods -n observability
 
 The OAuth patch in `scripts/deploy.sh` requires a cluster restart of the OAuth server. If users see "Invalid credentials," run:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc rollout restart deployment/oauth-openshift -n openshift-authentication
 oc rollout status deployment/oauth-openshift -n openshift-authentication
@@ -219,7 +219,7 @@ Then wait 60 seconds before retrying login.
 
 The Kustomize deployment must complete fully before bindings resolve. Re-run:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc apply -k install/
 sleep 30
@@ -238,7 +238,7 @@ Audit logging is enabled by default on OCP 4.16+. If the command returns nothing
 
 The cleanup script restores `self-provisioners` from the backup. If Scenario 7 fails mid-way, restore manually:
 
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc patch clusterrolebinding self-provisioners \
   --type=json \

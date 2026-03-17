@@ -23,14 +23,14 @@ The `nf-metrics-aggregate` ClusterRole in this demo extends the built-in `view` 
 
 . Log in as `platform-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 ----
 
 . Show the problem -- `cp-viewer` cannot see ServiceMonitors before aggregation:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i list servicemonitors.monitoring.coreos.com \
   --as=cp-viewer -n nf-control-plane
@@ -39,14 +39,14 @@ oc auth can-i list servicemonitors.monitoring.coreos.com \
 
 . Apply the aggregation ClusterRole live:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc apply -f install/02-roles/nf-metrics-aggregate-clusterrole.yaml
 ----
 
 . Inspect the new ClusterRole and its aggregation label:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc describe clusterrole nf-metrics-aggregate
 # → Has label: rbac.authorization.k8s.io/aggregate-to-view: "true"
@@ -54,7 +54,7 @@ oc describe clusterrole nf-metrics-aggregate
 
 . Verify the immediate effect -- no binding changed:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i list servicemonitors.monitoring.coreos.com \
   --as=cp-viewer -n nf-control-plane
@@ -63,7 +63,7 @@ oc auth can-i list servicemonitors.monitoring.coreos.com \
 
 . Show how the built-in view role discovers the aggregated ClusterRole:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get clusterrole view -o yaml | grep -A10 aggregationRule
 ----
@@ -96,14 +96,14 @@ The audit log is written by the API server and accessible via `oc adm node-logs`
 
 . Log in as `platform-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 ----
 
 . View recent audit log entries:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
   | tail -5 \
@@ -112,7 +112,7 @@ oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
 
 . Filter for one user's activity and format it readably:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
   | grep '"username":"cp-developer"' \
@@ -132,7 +132,7 @@ for line in sys.stdin:
 
 . Show that denied attempts are recorded -- these are the compliance-critical entries:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
   | python3 -c "

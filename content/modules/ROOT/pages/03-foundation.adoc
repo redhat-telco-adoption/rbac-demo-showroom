@@ -27,35 +27,35 @@ OpenShift ships with dozens of built-in ClusterRoles. The platform team should u
 
 . Log in as `platform-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 ----
 
 . Show the four tenant namespaces:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get projects
 ----
 
 . Explore the built-in ClusterRoles (use these before writing custom ones):
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get clusterroles | grep -v "^system:" | grep -v "^openshift:"
 ----
 
 . Describe what `edit` actually includes:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc describe clusterrole edit
 ----
 
 . Show the custom roles defined for this demo:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc describe clusterrole cluster-auditor
 oc describe role nf-operator -n nf-control-plane
@@ -63,7 +63,7 @@ oc describe role nf-operator -n nf-control-plane
 
 . Show the complete access picture -- every grant in the cluster, one command:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get rolebindings --all-namespaces -o wide
 oc get clusterrolebindings | grep -v "^system:" | grep -v "^openshift:"
@@ -96,14 +96,14 @@ The contrast with vSphere folder inheritance is the moment that lands with every
 
 . Log in as `cp-developer` (has `edit` in nf-control-plane only):
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u cp-developer -p "MobileCore2026!"
 ----
 
 . Confirm this user can only see their namespace:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get projects
 # → Only "nf-control-plane"
@@ -111,7 +111,7 @@ oc get projects
 
 . Show what works within the namespace:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-control-plane                     # <1>
 oc get configmap amf-config -n nf-control-plane     # <1>
@@ -121,7 +121,7 @@ oc get secrets -n nf-control-plane                  # <1>
 
 . Show that other namespaces are completely inaccessible:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-user-plane                        # <1>
 oc get pods -n observability                        # <1>
@@ -130,7 +130,7 @@ oc get pods -n observability                        # <1>
 
 . Now show the symmetry from the other side:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u up-developer -p "MobileCore2026!"
 oc get pods -n nf-user-plane                        # <1>

@@ -32,14 +32,14 @@ We did not deploy Prometheus. We patched a ConfigMap in `openshift-monitoring` t
 
 . Log in as `obs-engineer`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u obs-engineer -p "MobileCore2026!"
 ----
 
 . Confirm edit access in observability:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n observability              # <1>
 ----
@@ -47,7 +47,7 @@ oc get pods -n observability              # <1>
 
 . Show cross-tenant read access:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-control-plane          # <1>
 oc get pods -n nf-user-plane             # <1>
@@ -57,7 +57,7 @@ oc logs deployment/amf -n nf-control-plane               # <1>
 
 . Confirm zero write access outside observability:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i delete pods -n nf-control-plane            # <1>
 oc auth can-i create deployments -n nf-user-plane        # <1>
@@ -67,7 +67,7 @@ oc auth can-i get secrets -n nf-control-plane            # <1>
 
 . Show the monitoring-specific grant:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i create servicemonitors.monitoring.coreos.com -n nf-control-plane  # <1>
 oc auth can-i create servicemonitors.monitoring.coreos.com -n nf-user-plane     # <1>
@@ -78,7 +78,7 @@ oc auth can-i create servicemonitors.monitoring.coreos.com -n openshift-monitori
 
 . Show the existing ServiceMonitors in the tenant namespaces:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get servicemonitor -n nf-control-plane   # → amf-monitor
 oc get servicemonitor -n nf-user-plane      # → upf-monitor
@@ -86,7 +86,7 @@ oc get servicemonitor -n nf-user-plane      # → upf-monitor
 
 . Switch to `platform-admin` and show the monitoring stack that was activated:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 oc get pods -n openshift-user-workload-monitoring
@@ -112,14 +112,14 @@ This scenario shows the live effect: remove the binding, test immediately, confi
 
 . Log in as `platform-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 ----
 
 . Show the default bindings:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc describe clusterrolebinding basic-users
 # → system:authenticated → basic-user
@@ -130,14 +130,14 @@ oc describe clusterrolebinding self-provisioners
 
 . Confirm a regular developer can create namespaces today:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i create projectrequests --as=cp-developer   # → yes (default)
 ----
 
 . Perform the live hardening -- remove the subjects from self-provisioners:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc patch clusterrolebinding self-provisioners \
   --type=json \
@@ -146,7 +146,7 @@ oc patch clusterrolebinding self-provisioners \
 
 . Confirm the immediate effect:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i create projectrequests --as=cp-developer   # → no (immediately)
 ----
@@ -179,7 +179,7 @@ The important distinction: RBAC and quotas are enforced at different points. RBA
 
 . Log in as `platform-admin` to inspect the quotas:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 
@@ -189,7 +189,7 @@ oc describe limitrange -n nf-control-plane
 
 . Switch to `cp-developer` and attempt to exceed the pod quota:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u cp-developer -p "MobileCore2026!"
 
@@ -200,7 +200,7 @@ oc scale deployment amf --replicas=15 -n nf-control-plane
 
 . Show what happened -- the API accepted the scale request but the ReplicaSet cannot create pods:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-control-plane
 oc get events -n nf-control-plane --sort-by='.lastTimestamp' | grep -i "quota\|forbidden" | tail -5
@@ -210,14 +210,14 @@ oc get resourcequota -n nf-control-plane
 
 . Scale back:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc scale deployment amf --replicas=2 -n nf-control-plane
 ----
 
 . Show that the user-plane namespace has its own independent quota:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 oc describe resourcequota -n nf-user-plane

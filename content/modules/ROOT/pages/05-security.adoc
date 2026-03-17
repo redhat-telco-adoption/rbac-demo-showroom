@@ -23,14 +23,14 @@ This scenario also creates an important contrast with Scenario 1. In Scenario 1,
 
 . Log in as `platform-auditor`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-auditor -p "MobileCore2026!"
 ----
 
 . Show broad read access across all namespaces:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get pods -n nf-control-plane         # <1>
 oc get pods -n nf-user-plane            # <1>
@@ -44,7 +44,7 @@ oc get configmap amf-config -n nf-control-plane -o yaml   # <1>
 
 . Show the deliberate Secret exclusion:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc get secrets -n nf-control-plane      # <1>
 oc get secrets -n nf-user-plane         # <1>
@@ -53,14 +53,14 @@ oc get secrets -n nf-user-plane         # <1>
 
 . Get the full permission inventory:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i --list --as=platform-auditor -n nf-control-plane
 ----
 
 . Confirm zero write access:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i create deployments --as=platform-auditor -n nf-control-plane  # <1>
 oc auth can-i delete pods --as=platform-auditor -n nf-user-plane            # <1>
@@ -99,7 +99,7 @@ Short-lived tokens are created with `oc create token`, which generates a token v
 
 . Log in as `platform-admin` to inspect the service account:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 
@@ -109,7 +109,7 @@ oc describe rolebinding pipeline-sa-rb -n nf-control-plane
 
 . Map the permission matrix:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc auth can-i update deployments \
   --as=system:serviceaccount:nf-control-plane:pipeline-sa \
@@ -132,7 +132,7 @@ oc auth can-i update deployments \
 
 . Generate a short-lived token and use it:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 TOKEN=$(oc create token pipeline-sa -n nf-control-plane --duration=24h)
 
@@ -143,7 +143,7 @@ oc whoami
 
 . Run a deployment update (simulating a CI/CD pipeline):
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc set image deployment/amf amf=registry.access.redhat.com/ubi9/nginx-124:latest \
   -n nf-control-plane     # <1>
@@ -156,7 +156,7 @@ oc delete deployment amf -n nf-control-plane          # <2>
 
 . Log back in as `platform-admin`:
 +
-[source,bash]
+[source,bash,subs="attributes+"]
 ----
 oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
 ----
