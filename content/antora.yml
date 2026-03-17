@@ -12,6 +12,7 @@ asciidoc:
     page-pagination: true
     showroom-collection-version: v1.5.6
     guid: '%GUID%'
-    openshift_console_url: https://console-openshift-console.apps.cluster-abc123.ocpv00.rhdp.net
+    openshift_api_url: https://api.cluster-t4psk.t4psk.sandbox3435.opentlc.com:6443
+    openshift_console_url: https://console-openshift-console.apps.cluster-t4psk.t4psk.sandbox3435.opentlc.com
     openshift_cluster_ingress_domain: apps.cluster-abc123.ocpv00.rhdp.net
     lab_name: 'OpenShift RBAC Demo'
