@@ -1,0 +1,232 @@
+= Module 4: Advanced access patterns
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 2
+
+toc::[]
+
+This module covers three patterns that differentiate mature OpenShift deployments: cross-namespace access with documented justification, live hardening of default system groups, and resource quotas as a separate governance gate from RBAC.
+
+== Part 1 -- Scenario 6: Observability cross-tenant access (~8 min)
+
+=== Know
+
+_Cross-namespace access via ClusterRole on a Group -- documented, auditable, bounded._
+
+The observability engineering team needs to read workload logs and metrics from both tenant namespaces to do their job. But "read everything" must not mean "change anything outside observability."
+
+The `obs-engineer` user demonstrates two layered grants:
+
+. *`edit` in `observability`* via a RoleBinding -- full control over the monitoring namespace.
+. *`cross-ns-reader` ClusterRole via ClusterRoleBinding on the `obs-engineers` group* -- cluster-wide read access to pods, logs, and deployments across all namespaces. No write access.
+. *`monitoring-edit` in both tenant namespaces* -- a built-in OpenShift role that allows creating ServiceMonitors and PrometheusRules. This is how the observability team configures monitoring targets without needing edit access to the tenant namespaces themselves.
+
+The key point: the cross-namespace access is *documented in a ClusterRoleBinding*. It is not an undocumented side effect of a broad role. An auditor running `oc get clusterrolebindings` can see exactly who has cross-namespace access and why.
+
+[NOTE]
+====
+We did not deploy Prometheus. We patched a ConfigMap in `openshift-monitoring` to enable user workload monitoring. The platform activated its own monitoring stack. `monitoring-edit` is an OpenShift-provided role for exactly this pattern. Use what the platform gives you before installing new things.
+====
+
+=== Show
+
+. Log in as `obs-engineer`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u obs-engineer -p "MobileCore2026!"
+----
+
+. Confirm edit access in observability:
++
+[source,bash]
+----
+oc get pods -n observability              # <1>
+----
+<1> Succeeds.
+
+. Show cross-tenant read access:
++
+[source,bash]
+----
+oc get pods -n nf-control-plane          # <1>
+oc get pods -n nf-user-plane             # <1>
+oc logs deployment/amf -n nf-control-plane               # <1>
+----
+<1> All succeed -- cross-namespace read via ClusterRoleBinding.
+
+. Confirm zero write access outside observability:
++
+[source,bash]
+----
+oc auth can-i delete pods -n nf-control-plane            # <1>
+oc auth can-i create deployments -n nf-user-plane        # <1>
+oc auth can-i get secrets -n nf-control-plane            # <1>
+----
+<1> All denied.
+
+. Show the monitoring-specific grant:
++
+[source,bash]
+----
+oc auth can-i create servicemonitors.monitoring.coreos.com -n nf-control-plane  # <1>
+oc auth can-i create servicemonitors.monitoring.coreos.com -n nf-user-plane     # <1>
+oc auth can-i create servicemonitors.monitoring.coreos.com -n openshift-monitoring  # <2>
+----
+<1> Both succeed.
+<2> Denied -- the observability team cannot touch the platform monitoring namespace.
+
+. Show the existing ServiceMonitors in the tenant namespaces:
++
+[source,bash]
+----
+oc get servicemonitor -n nf-control-plane   # → amf-monitor
+oc get servicemonitor -n nf-user-plane      # → upf-monitor
+----
+
+. Switch to `platform-admin` and show the monitoring stack that was activated:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+oc get pods -n openshift-user-workload-monitoring
+# → prometheus-user-workload and thanos-ruler-user-workload running
+----
+
+== Part 2 -- Scenario 7: Default system groups (~6 min)
+
+=== Know
+
+_Every OpenShift cluster ships with implicit grants. Live hardening is possible and immediate._
+
+OpenShift ships with several default ClusterRoleBindings that grant permissions to all authenticated users:
+
+* `basic-users` -- binds `system:authenticated` to the `basic-user` role (can list projects, get own user info)
+* `self-provisioners` -- binds `system:authenticated:oauth` to the `self-provisioner` role (can create new projects and become admin)
+
+The `self-provisioners` binding is the one that matters most for governance. By default, any OAuth-authenticated user can create a new namespace and become its admin. In a controlled environment like TelcoCore's 5G platform, namespace provisioning should be centrally managed. The self-provisioners binding is one of the first things to remove after cluster install.
+
+This scenario shows the live effect: remove the binding, test immediately, confirm the change took effect in seconds.
+
+=== Show
+
+. Log in as `platform-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+----
+
+. Show the default bindings:
++
+[source,bash]
+----
+oc describe clusterrolebinding basic-users
+# → system:authenticated → basic-user
+
+oc describe clusterrolebinding self-provisioners
+# → system:authenticated:oauth → self-provisioner
+----
+
+. Confirm a regular developer can create namespaces today:
++
+[source,bash]
+----
+oc auth can-i create projectrequests --as=cp-developer   # → yes (default)
+----
+
+. Perform the live hardening -- remove the subjects from self-provisioners:
++
+[source,bash]
+----
+oc patch clusterrolebinding self-provisioners \
+  --type=json \
+  -p '[{"op":"replace","path":"/subjects","value":[]}]'
+----
+
+. Confirm the immediate effect:
++
+[source,bash]
+----
+oc auth can-i create projectrequests --as=cp-developer   # → no (immediately)
+----
+
+[NOTE]
+====
+This change is live and real. The cleanup script (`scripts/cleanup.sh`) restores `self-provisioners` to the original state. If you need to restore it manually during the demo, run: `oc patch clusterrolebinding self-provisioners --type=json -p '[{"op":"replace","path":"/subjects","value":[{"apiGroup":"rbac.authorization.k8s.io","kind":"Group","name":"system:authenticated:oauth"}]}]'`
+====
+
+Say to the audience: "By default, any OAuth-authenticated user can create a new project and become its admin. Removing `self-provisioner` from `system:authenticated:oauth` is one of the first hardening steps after cluster install. Namespaces should be provisioned centrally, with labels, quotas, and network policies applied consistently."
+
+== Part 3 -- Scenario 8: Resource quotas (~7 min)
+
+=== Know
+
+_RBAC controls what users can do. ResourceQuotas control how much they can consume. These are two separate, independent governance gates._
+
+A user with `edit` access in `nf-control-plane` can create pods, scale deployments, and update workloads. But without a ResourceQuota, nothing prevents them from scaling to 500 replicas and starving the cluster of compute resources.
+
+ResourceQuotas and LimitRanges complement RBAC:
+
+* *ResourceQuota* -- limits the total number of resources (pods, CPU, memory, PVCs) in a namespace
+* *LimitRange* -- sets default and maximum resource requests/limits for individual containers
+
+In vSphere, this is what Resource Pools do. A resource pool defines a guaranteed and maximum CPU/memory allocation for a set of VMs. OpenShift's quotas work similarly but apply at the namespace level and are enforced by the API server -- not the scheduler.
+
+The important distinction: RBAC and quotas are enforced at different points. RBAC is checked at request admission time (can this user do this action?). Quotas are checked after RBAC passes (does the namespace have capacity for this resource?).
+
+=== Show
+
+. Log in as `platform-admin` to inspect the quotas:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+
+oc describe resourcequota -n nf-control-plane
+oc describe limitrange -n nf-control-plane
+----
+
+. Switch to `cp-developer` and attempt to exceed the pod quota:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u cp-developer -p "MobileCore2026!"
+
+# Current workloads: amf×2 + smf×1 = 3 pods. Quota max is 10.
+# Requesting 15 replicas would require 15 pods -- over the limit.
+oc scale deployment amf --replicas=15 -n nf-control-plane
+----
+
+. Show what happened -- the API accepted the scale request but the ReplicaSet cannot create pods:
++
+[source,bash]
+----
+oc get pods -n nf-control-plane
+oc get events -n nf-control-plane --sort-by='.lastTimestamp' | grep -i "quota\|forbidden" | tail -5
+oc describe replicaset -l app=amf -n nf-control-plane | grep -A5 "Conditions:"
+oc get resourcequota -n nf-control-plane
+----
+
+. Scale back:
++
+[source,bash]
+----
+oc scale deployment amf --replicas=2 -n nf-control-plane
+----
+
+. Show that the user-plane namespace has its own independent quota:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+oc describe resourcequota -n nf-user-plane
+oc get pods -n nf-user-plane  # UPF is unaffected -- independent quota per namespace
+----
+
+[NOTE]
+====
+Say to the audience: "RBAC answers who can do what. Quota answers how much. A tenant with `edit` and no quota could deploy enough pods to starve other tenants. In vSphere, Resource Pools handle this. Here it is declarative YAML with hard limits -- the same YAML stored in Git and reviewed in pull requests as your RBAC definitions."
+====
+
+Pause and ask: "Do you have resource isolation between teams on your current shared platform? Can one team's workload affect another team's capacity?"

@@ -1,0 +1,104 @@
+= Demo overview
+:toc:
+:toc-placement: preamble
+:icons: font
+
+OpenShift ships with a complete, native RBAC system that maps directly to VMware vCenter governance concepts -- without add-on operators or external tooling.
+
+== Background
+
+*TelcoCore Inc.* is a mid-sized telecommunications company running its 5G network functions on VMware vSphere. The platform team has managed vCenter permissions for years: folders, roles, global permissions, and resource pools. Their governance model works, but it is entirely manual, click-driven, and impossible to audit without vCenter plugins.
+
+TelcoCore is evaluating OpenShift to host its next-generation 5G network function workloads -- AMF, SMF, and UPF -- across three isolated tenant domains: control plane (NF Control Plane), user plane (NF User Plane), and observability. Before committing, the platform team needs to answer one question:
+
+_Can OpenShift replicate the governance controls we rely on in vSphere, and can it do it in a way that survives an audit?_
+
+This demo answers that question.
+
+== The problem
+
+The most common objection from VMware platform engineers evaluating OpenShift is: *"RBAC is too complex, and we'll lose the control we have today."*
+
+This objection has two parts:
+
+. *Familiarity*: vCenter's permission model is well understood. Every admin knows how to navigate folders and assign roles through the GUI.
+. *Control*: vSphere folder permissions propagate to children automatically. Admins trust that a permission granted at the datacenter level flows down. They worry OpenShift's model is harder to reason about.
+
+The reality is the opposite. OpenShift RBAC is *more explicit* -- not more complex. Every permission grant is a discrete, inspectable, version-controllable Kubernetes object. Nothing is inherited implicitly. And that is the feature, not the limitation.
+
+== VMware to OpenShift concept mapping
+
+Use this table when opening the demo. Return to it after each scenario.
+
+[cols="2,2,3"]
+|===
+|VMware vSphere |OpenShift equivalent |Key difference
+
+|vCenter Permission Domain
+|Namespace
+|Hard boundary. No propagation between sibling namespaces.
+
+|vCenter Role
+|Role / ClusterRole
+|Defined as YAML. Version-controlled. Diffs are readable.
+
+|Permission Assignment
+|RoleBinding / ClusterRoleBinding
+|A discrete API object. Every grant is auditable.
+
+|Global Permission
+|ClusterRoleBinding
+|Cluster-scoped, not folder-scoped. Explicit, not inherited.
+
+|Service Account (automation)
+|ServiceAccount + time-limited token
+|Short-lived tokens. No shared passwords. Blast radius defined per SA.
+
+|Group membership
+|Group + RoleBinding
+|One binding for the group. Offboarding is one command: `oc adm groups remove-users`.
+
+|Resource Pool
+|ResourceQuota + LimitRange
+|Separate governance gate: controls *how much*, not *who can*.
+
+|*Propagate to children*
+|*Does not exist*
+|*Silence is denial. Nothing is inherited. This surprises every VMware admin.*
+|===
+
+[NOTE]
+====
+The last row is the most important point in this demo. Return to it explicitly after Scenario 1 (Tenant Isolation). The absence of implicit inheritance is a security property -- not a missing feature.
+====
+
+== Business value
+
+Every capability demonstrated in this demo ships with OpenShift out of the box:
+
+* *No additional operators* required for RBAC, audit logging, or resource quotas
+* *GitOps-ready*: all role and binding definitions are declarative YAML, stored in Git, applied by Kustomize or ArgoCD
+* *Compliance-ready*: every API call is logged in the OpenShift audit log with user, verb, resource, namespace, and response code
+* *Self-service delegation*: tenant admins manage access within their namespace without platform team involvement -- but cannot escalate beyond their own permissions
+
+== Common customer questions
+
+*"This looks more complex than VMware's permission model."*
+
+Suggest: "It's more _visible_, not more complex. Every permission you had in VMware existed -- they just weren't easily inspectable. One command gives you every access grant in the cluster in a format you can version-control. The anti-escalation protection, quota enforcement, and audit log all required manual setup or separate tools in VMware. Here they are built into the platform."
+
+*"Who manages this in production?"*
+
+Suggest: "The platform team manages namespaces, cluster-level roles, and ClusterRoleBindings. Tenant teams manage RoleBindings within their own namespaces. The `admin` role gives them full self-service within their namespace -- including RBAC delegation -- but they can never escalate beyond their own permissions."
+
+*"What about GitOps integration?"*
+
+Suggest: "Everything in the demo's `install/` directory is declarative YAML -- ArgoCD-ready. The imperative setup steps (htpasswd generation, OAuth patching) stay in `scripts/deploy.sh`. That separation is intentional and standard across Red Hat customer deployments."
+
+*"Can we still use existing AD groups?"*
+
+Suggest: "Yes. OpenShift LDAP group sync lets you mirror Active Directory groups into OpenShift Groups. Once synced, you bind a Group to a Role exactly as shown in this demo. The RBAC model is identical -- the identity source is external."
+
+*"What happens when a developer leaves the team?"*
+
+Suggest: "If the user is in a Group, one command removes them cluster-wide: `oc adm groups remove-users <group> <user>`. All bindings for that group remain intact. If the user has direct RoleBindings instead of group membership -- which we'll show is the wrong pattern -- you must find and delete each binding individually. Groups are always right for humans."

@@ -1,0 +1,162 @@
+= Module 5: Extended capabilities
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 2
+
+toc::[]
+
+This module covers two capabilities that demonstrate OpenShift RBAC maturity: role aggregation for extending built-in roles when new CRDs are installed, and the audit log as a compliance trail.
+
+== Part 1 -- Scenario 9: Aggregated ClusterRoles (~8 min)
+
+=== Know
+
+_Role aggregation extends built-in roles for new CRDs without touching existing bindings._
+
+When a new Kubernetes operator installs custom resource definitions (CRDs), the built-in roles (`view`, `edit`, `admin`) do not automatically include permissions for the new resource types. Without aggregation, every namespace would need updated RoleBindings -- a maintenance burden that scales with cluster size.
+
+ClusterRole aggregation solves this with labels. The built-in `view`, `edit`, and `admin` ClusterRoles are defined with `aggregationRules`. Any ClusterRole with the matching label is automatically merged in. When you install a new CRD and want to make it visible to all users with `view` access cluster-wide, you create one ClusterRole with the label `rbac.authorization.k8s.io/aggregate-to-view: "true"` -- and every existing `view` binding in every namespace gains the new permissions immediately. No binding changes required.
+
+The `nf-metrics-aggregate` ClusterRole in this demo extends the built-in `view` role to include read access to `servicemonitors.monitoring.coreos.com`. This ClusterRole is *not pre-applied* in the demo environment -- you apply it live during the scenario to show the before and after states.
+
+=== Show
+
+. Log in as `platform-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+----
+
+. Show the problem -- `cp-viewer` cannot see ServiceMonitors before aggregation:
++
+[source,bash]
+----
+oc auth can-i list servicemonitors.monitoring.coreos.com \
+  --as=cp-viewer -n nf-control-plane
+# → no
+----
+
+. Apply the aggregation ClusterRole live:
++
+[source,bash]
+----
+oc apply -f install/02-roles/nf-metrics-aggregate-clusterrole.yaml
+----
+
+. Inspect the new ClusterRole and its aggregation label:
++
+[source,bash]
+----
+oc describe clusterrole nf-metrics-aggregate
+# → Has label: rbac.authorization.k8s.io/aggregate-to-view: "true"
+----
+
+. Verify the immediate effect -- no binding changed:
++
+[source,bash]
+----
+oc auth can-i list servicemonitors.monitoring.coreos.com \
+  --as=cp-viewer -n nf-control-plane
+# → yes
+----
+
+. Show how the built-in view role discovers the aggregated ClusterRole:
++
+[source,bash]
+----
+oc get clusterrole view -o yaml | grep -A10 aggregationRule
+----
+
+[NOTE]
+====
+Say to the audience: "When a new CRD is installed, create one ClusterRole with the right aggregation label. Every existing binding of that built-in role cluster-wide gains the new permissions immediately -- no per-namespace work, no binding changes. This is how platform teams extend RBAC for operators without creating a maintenance backlog."
+====
+
+== Part 2 -- Scenario 10: Audit log (~5 min)
+
+=== Know
+
+_RBAC prevents unauthorized actions. The audit log proves what authorized users actually did._
+
+RBAC is the enforcement layer. The audit log is the evidence layer. Every API call to the OpenShift API server is logged with:
+
+* User identity (username or service account)
+* Timestamp
+* HTTP verb (get, list, create, update, delete, patch)
+* Resource type and name
+* Namespace
+* Response code (200 for success, 403 for forbidden)
+
+For a regulated telco environment, this log is the compliance trail. It answers: "Who accessed this resource, when, and what did they do?" It also records denied attempts -- the 403 responses -- which are often more interesting than the successful ones during a security investigation.
+
+The audit log is written by the API server and accessible via `oc adm node-logs`. In production, organizations typically forward it to a SIEM (Splunk, OpenSearch, etc.) for long-term retention and alerting.
+
+=== Show
+
+. Log in as `platform-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+----
+
+. View recent audit log entries:
++
+[source,bash]
+----
+oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
+  | tail -5 \
+  | python3 -m json.tool 2>/dev/null | head -40
+----
+
+. Filter for one user's activity and format it readably:
++
+[source,bash]
+----
+oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
+  | grep '"username":"cp-developer"' \
+  | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        e = json.loads(line)
+        ts = e.get('requestReceivedTimestamp', '')[:19]
+        verb = e.get('verb', '')
+        ref = e.get('objectRef', {})
+        print(f'{ts} | {verb:8} | {ref.get(\"resource\",\"\"):20} | {ref.get(\"namespace\",\"\")}')
+    except:
+        pass
+" | tail -20
+----
+
+. Show that denied attempts are recorded -- these are the compliance-critical entries:
++
+[source,bash]
+----
+oc adm node-logs --role=master --path=openshift-apiserver/audit.log \
+  | python3 -c "
+import sys, json
+for line in sys.stdin:
+    try:
+        e = json.loads(line)
+        if e.get('responseStatus', {}).get('code') == 403:
+            u = e.get('user', {}).get('username', '')
+            verb = e.get('verb', '')
+            ref = e.get('objectRef', {})
+            print(f'{u:25} tried to {verb} {ref.get(\"resource\",\"\")} in {ref.get(\"namespace\",\"\")}')
+    except:
+        pass
+" | tail -10
+----
+
+[NOTE]
+====
+Say to the audience: "Every API call is in the audit log. Who, when, what verb, what resource, what namespace, allowed or denied. RBAC prevents unauthorized actions. The audit log demonstrates that authorized actions were used appropriately. In a regulated telco environment, this is your compliance trail. In a breach investigation, this is your forensic record."
+====
+
+In production, forward the audit log to a SIEM:
+
+* Splunk Operator for OpenShift -- available in OperatorHub
+* OpenShift Logging (Loki/Vector stack) -- ships audit logs to any compatible endpoint
+* Compliance Operator -- continuously evaluates cluster state against CIS, NIST, and PCI profiles

@@ -1,0 +1,67 @@
+= How to use this demo guide
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 1
+
+toc::[]
+
+This guide helps sales engineers and technical presenters deliver the OpenShift RBAC demo to customers evaluating OpenShift as a replacement or complement to VMware infrastructure.
+
+This is a *presenter-led demo* -- there are no participant hands-on steps. The presenter runs all commands from their own workstation or a pre-configured environment.
+
+== Reading the guide
+
+Every demo is different. Adapt this guide to your audience and available time. For audiences already familiar with Kubernetes RBAC, you can move faster through Modules 1 and 2 and spend more time on Modules 4 and 5. For vSphere-heavy audiences, slow down on the concept mapping sections.
+
+== Demo overview
+
+The xref:01-overview.adoc[Demo Overview] section provides:
+
+* Business context and the customer scenario (TelcoCore Inc.)
+* The core VMware-to-OpenShift concept mapping
+* Common customer objections and suggested responses
+* Business value framing
+
+IMPORTANT: Read the overview thoroughly before delivering the demo. The business framing is as important as the technical steps.
+
+== Demo details
+
+The xref:02-details.adoc[Demo Details] section is a single reference for:
+
+* Proposed timing per scenario (total: ~90 minutes)
+* Products and versions
+* All demo user credentials
+* Troubleshooting common setup issues
+* Follow-up resources
+
+== Demo modules
+
+The five modules cover 11 scenarios total. Each scenario is written using the *Know/Show* structure.
+
+=== Know
+
+The *Know* section is background for the presenter. It explains:
+
+* What you are about to demonstrate
+* Why it matters to the customer
+* The business challenge it addresses
+* How it maps to familiar VMware concepts
+
+The Know section is *not a script*. Read it, internalize it, then speak naturally in your own words.
+
+=== Show
+
+The *Show* section contains step-by-step commands to run during the demonstration. Steps are numbered and sequential. Expected outcomes are noted where the output is important.
+
+[NOTE]
+====
+Commands use `{openshift_api_url}` and `{openshift_console_url}` as placeholders. Substitute the actual URLs for your environment before starting.
+====
+
+== Before you start
+
+. Complete pre-flight: `./scripts/deploy.sh` then `./scripts/validate.sh` (must exit 0).
+. Open the web console: Administrator -> User Management -> RoleBindings.
+. Have a terminal ready with `oc` configured to reach the cluster.
+
+xref:01-overview.adoc[Start with the demo overview ->]

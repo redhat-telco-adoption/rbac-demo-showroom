@@ -1,0 +1,145 @@
+= Module 1: Platform foundation
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 2
+
+toc::[]
+
+This module orients the audience with the cluster structure and demonstrates that namespace boundaries enforce strict tenant isolation -- with no inheritance or propagation between sibling namespaces.
+
+== Part 1 -- Scenario 0: The platform team's view (~5 min)
+
+=== Know
+
+_What platform-admin can see establishes the "before" picture. Once the audience understands the full access picture, subsequent scenarios make sense._
+
+The platform team owns the cluster. They use the built-in `cluster-admin` ClusterRoleBinding to manage everything, but they have also defined a structured RBAC policy for the 5G network function tenants. The structure is:
+
+* *nf-control-plane* -- AMF and SMF workloads; control-plane team
+* *nf-user-plane* -- UPF workloads; user-plane team
+* *observability* -- monitoring stack; observability engineering team
+
+The key message for this opening scenario: *all access grants are inspectable with one command*. In vCenter, you click through the Permissions tab on each folder. In OpenShift, you run `oc get rolebindings --all-namespaces` and get every access grant in the cluster in a format you can diff, version-control, and audit.
+
+OpenShift ships with dozens of built-in ClusterRoles. The platform team should understand them before writing custom roles. `edit` covers most developer use cases. `view` covers read-only access. `admin` covers namespace administration. Custom roles fill the gaps -- not the defaults.
+
+=== Show
+
+. Log in as `platform-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+----
+
+. Show the four tenant namespaces:
++
+[source,bash]
+----
+oc get projects
+----
+
+. Explore the built-in ClusterRoles (use these before writing custom ones):
++
+[source,bash]
+----
+oc get clusterroles | grep -v "^system:" | grep -v "^openshift:"
+----
+
+. Describe what `edit` actually includes:
++
+[source,bash]
+----
+oc describe clusterrole edit
+----
+
+. Show the custom roles defined for this demo:
++
+[source,bash]
+----
+oc describe clusterrole cluster-auditor
+oc describe role nf-operator -n nf-control-plane
+----
+
+. Show the complete access picture -- every grant in the cluster, one command:
++
+[source,bash]
+----
+oc get rolebindings --all-namespaces -o wide
+oc get clusterrolebindings | grep -v "^system:" | grep -v "^openshift:"
+----
+
+[NOTE]
+====
+Say to the audience: "In vCenter you click through the Permissions tab on each folder. Here you run `oc get rolebindings --all-namespaces` -- every access grant in the cluster, in a format you can diff, version-control, and audit."
+====
+
+== Part 2 -- Scenario 1: Tenant isolation (~8 min)
+
+=== Know
+
+_The most important concept in this demo: silence is denial. There is no propagation between namespaces._
+
+In vSphere, a permission applied to a datacenter object propagates to all child objects by default. Admins rely on this inheritance to grant broad access with minimal configuration. But it also means that a permission applied at the wrong level affects more objects than intended -- and auditing inheritance chains is non-trivial.
+
+OpenShift namespaces work differently. *A RoleBinding in namespace A has zero effect on namespace B.* There is no propagation, no inheritance, no "propagate to children" checkbox. If a user has `edit` in `nf-control-plane`, they have exactly that and nothing else. They cannot see pods in `nf-user-plane`. They cannot even see that `nf-user-plane` exists.
+
+This is a security property, not a limitation. It means:
+
+* A compromised credential for one tenant cannot read another tenant's workloads
+* A misconfigured role in one namespace does not leak to sibling namespaces
+* The blast radius of any mistake is bounded by namespace
+
+The contrast with vSphere folder inheritance is the moment that lands with every VMware admin in the audience.
+
+=== Show
+
+. Log in as `cp-developer` (has `edit` in nf-control-plane only):
++
+[source,bash]
+----
+oc login {openshift_api_url} -u cp-developer -p "MobileCore2026!"
+----
+
+. Confirm this user can only see their namespace:
++
+[source,bash]
+----
+oc get projects
+# → Only "nf-control-plane"
+----
+
+. Show what works within the namespace:
++
+[source,bash]
+----
+oc get pods -n nf-control-plane                     # <1>
+oc get configmap amf-config -n nf-control-plane     # <1>
+oc get secrets -n nf-control-plane                  # <1>
+----
+<1> All succeed. Note that `cp-developer` with `edit` CAN read Secrets -- contrast this with the auditor in Scenario 4.
+
+. Show that other namespaces are completely inaccessible:
++
+[source,bash]
+----
+oc get pods -n nf-user-plane                        # <1>
+oc get pods -n observability                        # <1>
+----
+<1> Both return "Forbidden." The namespace boundary is absolute.
+
+. Now show the symmetry from the other side:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u up-developer -p "MobileCore2026!"
+oc get pods -n nf-user-plane                        # <1>
+oc get pods -n nf-control-plane                     # <2>
+----
+<1> Succeeds -- this is the user-plane developer's home namespace.
+<2> Forbidden -- symmetrical isolation. Neither tenant can reach the other.
+
+[NOTE]
+====
+Ask the audience: "How confident are you that two sibling vCenter folders truly cannot see each other's objects? In OpenShift, that question has a definitive answer: they cannot. Silence is denial. There is no propagation. This is guaranteed by the API server."
+====

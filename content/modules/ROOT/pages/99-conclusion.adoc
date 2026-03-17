@@ -1,0 +1,121 @@
+= Conclusion & next steps
+:toc:
+:toc-placement: preamble
+:icons: font
+
+== What you demonstrated
+
+You walked TelcoCore's platform engineers through 11 scenarios covering the full OpenShift RBAC capability set. Every scenario mapped to something they already understand from vCenter.
+
+== VMware to OpenShift -- full mapping recap
+
+Return to this table when closing the demo. Connect each row to a scenario the audience just saw.
+
+[cols="2,2,2,1"]
+|===
+|VMware vSphere |OpenShift equivalent |Key difference |Scenario
+
+|vCenter Permission Domain
+|Namespace
+|Hard boundary. No propagation between siblings.
+|1
+
+|vCenter Role
+|Role / ClusterRole
+|YAML. Version-controlled. Diffs are readable.
+|0, 3
+
+|Permission Assignment
+|RoleBinding / ClusterRoleBinding
+|Discrete API object. Every grant is auditable.
+|0, 2
+
+|Global Permission
+|ClusterRoleBinding
+|Cluster-scoped. Explicit, not inherited.
+|4, 6
+
+|Service Account (automation)
+|ServiceAccount + time-limited token
+|Short-lived tokens. Blast radius defined per SA.
+|5
+
+|Group membership
+|Group + RoleBinding
+|One binding. Offboarding is one command.
+|3, 7
+
+|Resource Pool
+|ResourceQuota + LimitRange
+|Controls *how much*, independent of RBAC.
+|8
+
+|Custom role (VM Operator)
+|Custom Role / ClusterRole
+|YAML. Aggregation extends without touching bindings.
+|3, 9
+
+|Audit trail (vCenter Events)
+|OpenShift audit log
+|Every API call. Denied attempts recorded.
+|10
+
+|*Propagate to children*
+|*Does not exist*
+|*Silence is denial. This is a security property.*
+|1
+|===
+
+== Key takeaways
+
+. *Native governance*: Every capability shown ships with OpenShift. No additional operators, no add-on licensing.
+
+. *Namespace isolation*: Hard boundaries between tenants with no implicit inheritance. Silence is denial.
+
+. *Group-based access*: Bind roles to Groups, not individual users. Offboarding is one command per group.
+
+. *Defined blast radius*: ServiceAccount permissions are scoped to the minimum needed. Define the blast radius before a compromise, not after.
+
+. *Separation of duties*: Auditor roles exclude Secrets by design. RBAC and quotas are independent governance gates.
+
+. *Compliance trail*: Every API call is logged with user, verb, resource, and response code. Denied attempts are recorded.
+
+. *GitOps-ready*: All role and binding definitions are declarative YAML. Stored in Git. Reviewed in pull requests. Applied by Kustomize or ArgoCD.
+
+== Handling final questions
+
+*"This seems more complex than VMware."*
+
+"It is more _visible_, not more complex. Every permission you had in VMware existed -- they just were not easily inspectable. One command gives you every access grant in the cluster in a format you can version-control."
+
+*"How do we migrate existing vCenter groups?"*
+
+"OpenShift LDAP group sync mirrors Active Directory groups into OpenShift Groups. You configure a sync schedule, run the initial sync, and from that point your AD groups are available to bind in RBAC policies. The binding model is identical to what you saw today."
+
+*"What about multi-cluster?"*
+
+"Red Hat Advanced Cluster Management (RHACM) applies RBAC policies across a fleet of clusters from a single control plane. Everything in this demo scales to multi-cluster with RHACM's Policy engine."
+
+== Next steps
+
+. *Deploy it yourself*: The demo environment is ready to use.
++
+[source,bash]
+----
+git clone https://github.com/jlmayorga/openshift-demos
+cd openshift-demos/rbac-demo
+./scripts/deploy.sh
+----
+
+. *Explore the YAML*: Every role, binding, and quota in this demo is in `install/`. Read the files alongside the scenarios to understand the mapping from concept to manifest.
+
+. *Run the validation*: `./scripts/validate.sh` checks every RBAC grant demonstrated in this guide.
+
+. *Try it on your own cluster*: The demo requires only an OpenShift 4.16+ cluster with cluster-admin access. No operators needed.
+
+== Resources
+
+* https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/authentication_and_authorization/using-rbac[OpenShift RBAC documentation]
+* https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/security_and_compliance[OpenShift security and compliance guide]
+* https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/authentication_and_authorization/ldap-syncing[LDAP group sync documentation]
+* https://docs.redhat.com/en/documentation/red_hat_advanced_cluster_management_for_kubernetes[Red Hat Advanced Cluster Management documentation]

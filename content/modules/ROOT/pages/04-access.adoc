@@ -1,0 +1,159 @@
+= Module 2: Access control in action
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 2
+
+toc::[]
+
+This module demonstrates two concepts: how tenant admins delegate access within their namespace without involving the platform team, and how custom roles define precise permission boundaries for specialized users.
+
+== Part 1 -- Scenario 2: Tenant admin delegates (~8 min)
+
+=== Know
+
+_Self-service access management within a namespace boundary -- without platform team involvement._
+
+In a typical VMware environment, access changes require a vCenter admin. A team lead who needs to grant a contractor read-only access to a folder must file a ticket or call someone with vCenter credentials. The platform team becomes a bottleneck.
+
+OpenShift solves this with namespace-scoped RBAC delegation. A user with `admin` in a namespace can create RoleBindings within that namespace -- granting other users access to the same namespace without any platform team involvement.
+
+The critical safety mechanism is *anti-escalation*. A user cannot grant more access than they themselves hold. `cp-admin` has `admin` in `nf-control-plane`. They can grant `edit`, `view`, or other roles within that namespace. They cannot grant `cluster-admin` to anyone -- because they do not hold `cluster-admin` themselves. This is enforced by the API server, not by policy configuration that someone could forget to enable.
+
+The business impact: tenant teams own their own access management. Platform teams focus on cluster governance rather than ticket queues.
+
+=== Show
+
+. Log in as `cp-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u cp-admin -p "MobileCore2026!"
+----
+
+. Verify what `cp-admin` can and cannot do:
++
+[source,bash]
+----
+oc auth can-i create rolebindings -n nf-control-plane     # <1>
+oc auth can-i create roles -n nf-control-plane            # <1>
+oc auth can-i create rolebindings -n nf-user-plane        # <2>
+oc auth can-i create clusterrolebindings                  # <2>
+----
+<1> Both succeed -- `cp-admin` controls access within their namespace.
+<2> Both denied -- `cp-admin` cannot touch other namespaces or the cluster level.
+
+. Grant a contractor temporary view access:
++
+[source,bash]
+----
+oc create rolebinding contractor-temp \
+  --clusterrole=view \
+  --user=external-contractor \
+  -n nf-control-plane
+----
+
+. Verify the grant took effect immediately:
++
+[source,bash]
+----
+oc auth can-i list pods --as=external-contractor -n nf-control-plane   # <1>
+oc auth can-i list pods --as=external-contractor -n nf-user-plane      # <2>
+----
+<1> Succeeds -- view access granted.
+<2> Denied -- access is scoped to nf-control-plane only.
+
+. Attempt to escalate -- try to grant `cluster-admin` to the contractor:
++
+[source,bash]
+----
+oc create rolebinding escalation-attempt \
+  --clusterrole=cluster-admin \
+  --user=external-contractor \
+  -n nf-control-plane
+----
++
+Expected output: `Error: user "cp-admin" is not allowed to bind ClusterRole "cluster-admin"`
+
+. Clean up the contractor binding:
++
+[source,bash]
+----
+oc delete rolebinding contractor-temp -n nf-control-plane
+----
+
+[NOTE]
+====
+Say to the audience: "You cannot grant someone more access than you yourself have. `cp-admin` cannot hand out `cluster-admin` because `cp-admin` does not hold it. This is enforced by the API server -- not something you configure or can forget to configure. It is not a webhook or admission policy. It is a core Kubernetes API guarantee."
+====
+
+== Part 2 -- Scenario 3: Custom role -- NF Operator (~10 min)
+
+=== Know
+
+_Custom roles define precise permissions for specialized users. The direct-vs-group binding contrast teaches the right pattern for human identities._
+
+In vSphere, the "VM Operator" role is a built-in role that allows users to start, stop, and interact with virtual machines -- but not delete or reconfigure them. VMware admins know this role well because it matches a real operational need.
+
+OpenShift's `nf-operator` role serves the same purpose for network function deployments. An operator running the 5G AMF can scale deployments, read logs, and check status -- but cannot delete workloads or read Secrets. The precise permission set is defined in YAML and is auditable in Git.
+
+The second lesson in this scenario is about binding strategy. `cp-operator` has a *direct user binding* -- a RoleBinding that names the user directly, not a group. This is intentional for the demo: it gives a concrete example of the wrong pattern. When the team grows, a direct binding for each new operator means a new RoleBinding object per person. Offboarding requires finding and deleting each binding individually across every namespace.
+
+With a Group, one binding covers all members. Offboarding is `oc adm groups remove-users cp-operators cp-operator` -- one command, one place.
+
+=== Show
+
+. Log in as `platform-admin` to inspect the custom role:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+oc describe role nf-operator -n nf-control-plane
+----
+
+. Use `oc auth can-i` to map the permission matrix:
++
+[source,bash]
+----
+oc auth can-i update deployments --as=cp-operator -n nf-control-plane   # <1>
+oc auth can-i get pods/log --as=cp-operator -n nf-control-plane         # <1>
+oc auth can-i delete deployments --as=cp-operator -n nf-control-plane   # <2>
+oc auth can-i get secrets --as=cp-operator -n nf-control-plane          # <2>
+oc auth can-i get pods --as=cp-operator -n nf-user-plane                # <2>
+----
+<1> Both succeed -- scale and log access.
+<2> All denied -- no delete, no Secret access, no cross-namespace access.
+
+. Use the reverse-lookup command (useful after an incident):
++
+[source,bash]
+----
+oc adm policy who-can delete pods -n nf-control-plane
+# → Lists every user, group, and service account that can delete pods here
+----
+
+. Log in as `cp-operator` and demonstrate live:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u cp-operator -p "MobileCore2026!"
+
+oc scale deployment amf --replicas=3 -n nf-control-plane  # <1>
+oc logs deployment/amf -n nf-control-plane                # <1>
+oc delete deployment smf -n nf-control-plane              # <2>
+----
+<1> Both succeed.
+<2> Denied.
+
+. Scale back to the original replica count:
++
+[source,bash]
+----
+oc scale deployment amf --replicas=2 -n nf-control-plane
+----
+
+[NOTE]
+====
+Say to the audience: "`cp-operator` has a direct user binding -- no group. Add two more operators and you need two more bindings. With a group, one binding covers all members. Offboarding is `oc adm groups remove-users` -- one command, one place. Without groups you are hunting every namespace. Groups are always right for humans."
+====
+
+Pause here and ask: "When a new developer joins a project today, who handles their access -- the team lead or a central admin?"

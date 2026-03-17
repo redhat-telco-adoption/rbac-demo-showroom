@@ -1,0 +1,167 @@
+= Module 3: Security & compliance
+:source-highlighter: rouge
+:toc: macro
+:toclevels: 2
+
+toc::[]
+
+This module covers two compliance-critical patterns: a cluster-wide auditor role with deliberate Secret exclusion, and a CI/CD service account with a defined, bounded blast radius.
+
+== Part 1 -- Scenario 4: Platform auditor (~7 min)
+
+=== Know
+
+_Cluster-wide read access with a deliberate Secrets exclusion -- separation of duties for compliance._
+
+The `cluster-auditor` ClusterRole gives a user visibility across every namespace in the cluster. This is the role for a compliance officer, a security reviewer, or an external auditor who needs to inspect workload configuration without being able to change anything.
+
+The key design decision in this role is the *deliberate exclusion of Secrets*. `list` and `watch` on Secrets exposes their values -- one command can dump every credential in the cluster. An auditor does not need that. If an auditor requires Secret auditing for a specific investigation, that access is granted separately, documented, and time-scoped.
+
+This scenario also creates an important contrast with Scenario 1. In Scenario 1, `cp-developer` with `edit` could read Secrets in `nf-control-plane`. The platform auditor -- with broader cluster-wide access -- cannot read Secrets anywhere. More access in some dimensions does not mean more access in all dimensions.
+
+=== Show
+
+. Log in as `platform-auditor`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-auditor -p "MobileCore2026!"
+----
+
+. Show broad read access across all namespaces:
++
+[source,bash]
+----
+oc get pods -n nf-control-plane         # <1>
+oc get pods -n nf-user-plane            # <1>
+oc get pods -n observability            # <1>
+oc get deployments --all-namespaces     # <1>
+oc get rolebindings --all-namespaces    # <1>
+
+oc get configmap amf-config -n nf-control-plane -o yaml   # <1>
+----
+<1> All succeed -- cluster-wide read access.
+
+. Show the deliberate Secret exclusion:
++
+[source,bash]
+----
+oc get secrets -n nf-control-plane      # <1>
+oc get secrets -n nf-user-plane         # <1>
+----
+<1> Both denied -- by design, not by accident.
+
+. Get the full permission inventory:
++
+[source,bash]
+----
+oc auth can-i --list --as=platform-auditor -n nf-control-plane
+----
+
+. Confirm zero write access:
++
+[source,bash]
+----
+oc auth can-i create deployments --as=platform-auditor -n nf-control-plane  # <1>
+oc auth can-i delete pods --as=platform-auditor -n nf-user-plane            # <1>
+oc auth can-i create rolebindings --as=platform-auditor -n nf-control-plane # <1>
+----
+<1> All denied.
+
+[NOTE]
+====
+Say to the audience: "In Scenario 1, `cp-developer` with `edit` could read Secrets. A cluster-wide auditor cannot. `list` and `watch` on Secrets exposes their values -- one command dumps every credential in the cluster. An auditor who needs Secret auditing gets a separate, documented, time-scoped grant. This is separation of duties, enforced at the API level."
+====
+
+== Part 2 -- Scenario 5: CI/CD service account (~8 min)
+
+=== Know
+
+_Machine identities for automation. Defining blast radius before a compromise, not after._
+
+Every CI/CD pipeline needs credentials to deploy workloads. In many VMware environments, pipelines run under a shared service account with broad permissions because "it's easier." When that account is compromised, the blast radius is the entire vSphere environment.
+
+OpenShift ServiceAccounts are namespace-scoped, use short-lived tokens, and can be bound to minimal permission sets. The `pipeline-sa` ServiceAccount in this demo is bound to the `cicd-deployer` role in `nf-control-plane`. That role grants:
+
+* `update` on Deployments -- enough to change an image tag or scale
+* `get` and `list` on Pods, ReplicaSets, and Deployments -- enough to check rollout status
+
+It does not grant:
+* `delete` on anything
+* `get` on Secrets
+* Any access outside `nf-control-plane`
+
+The blast radius of a compromised `pipeline-sa` token is: update the AMF and SMF deployments in one namespace. That is it.
+
+Short-lived tokens are created with `oc create token`, which generates a token valid for a specified duration. No long-lived credentials stored in pipelines or config files.
+
+=== Show
+
+. Log in as `platform-admin` to inspect the service account:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+
+oc get serviceaccount pipeline-sa -n nf-control-plane
+oc describe rolebinding pipeline-sa-rb -n nf-control-plane
+----
+
+. Map the permission matrix:
++
+[source,bash]
+----
+oc auth can-i update deployments \
+  --as=system:serviceaccount:nf-control-plane:pipeline-sa \
+  -n nf-control-plane     # <1>
+
+oc auth can-i delete deployments \
+  --as=system:serviceaccount:nf-control-plane:pipeline-sa \
+  -n nf-control-plane     # <2>
+
+oc auth can-i get secrets \
+  --as=system:serviceaccount:nf-control-plane:pipeline-sa \
+  -n nf-control-plane     # <2>
+
+oc auth can-i update deployments \
+  --as=system:serviceaccount:nf-control-plane:pipeline-sa \
+  -n nf-user-plane        # <2>
+----
+<1> Succeeds.
+<2> All denied.
+
+. Generate a short-lived token and use it:
++
+[source,bash]
+----
+TOKEN=$(oc create token pipeline-sa -n nf-control-plane --duration=24h)
+
+oc login --token=$TOKEN
+oc whoami
+# → system:serviceaccount:nf-control-plane:pipeline-sa
+----
+
+. Run a deployment update (simulating a CI/CD pipeline):
++
+[source,bash]
+----
+oc set image deployment/amf amf=registry.access.redhat.com/ubi9/nginx-124:latest \
+  -n nf-control-plane     # <1>
+
+oc get pods -n nf-user-plane                          # <2>
+oc delete deployment amf -n nf-control-plane          # <2>
+----
+<1> Succeeds -- this is what the pipeline is allowed to do.
+<2> Both denied.
+
+. Log back in as `platform-admin`:
++
+[source,bash]
+----
+oc login {openshift_api_url} -u platform-admin -p "MobileCore2026!"
+----
+
+[NOTE]
+====
+Ask the audience: "What credentials do your current pipelines run under? If compromised, what is the blast radius? For `pipeline-sa`: update AMF and SMF deployments in one namespace. That is the entire blast radius. It is defined in a YAML file, stored in Git, reviewed in pull requests."
+====

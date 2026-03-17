@@ -1,0 +1,20 @@
+* xref:index.adoc[How to use this guide]
+* xref:01-overview.adoc[Demo overview]
+* xref:02-details.adoc[Demo details]
+
+.Module 1: Platform foundation
+* xref:03-foundation.adoc[Namespaces & tenant isolation]
+
+.Module 2: Access control in action
+* xref:04-access.adoc[Delegation & custom roles]
+
+.Module 3: Security & compliance
+* xref:05-security.adoc[Auditor & CI/CD automation]
+
+.Module 4: Advanced access patterns
+* xref:06-advanced.adoc[Cross-namespace, groups & quotas]
+
+.Module 5: Extended capabilities
+* xref:07-extended.adoc[Aggregation & audit trail]
+
+* xref:99-conclusion.adoc[Conclusion & next steps]

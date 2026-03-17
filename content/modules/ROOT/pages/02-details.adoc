@@ -1,0 +1,263 @@
+= Demo details
+:toc:
+:toc-placement: preamble
+:icons: font
+
+== Proposed timing
+
+Total runtime: approximately 90 minutes.
+
+[cols="1,2,1,1"]
+|===
+|Block |Topic |Time |Owner
+
+|Opening
+|VMware -> OpenShift mental model (concept mapping table)
+|10 min
+|Todd
+
+|Concepts
+|Rules, Roles, Bindings, YAML anatomy
+|15 min
+|Todd
+
+|Scenario 0
+|Platform team's view
+|5 min
+|Jose
+
+|Scenario 1
+|Tenant isolation
+|8 min
+|Jose
+
+|Scenario 2
+|Self-service delegation + anti-escalation
+|8 min
+|Jose
+
+|Scenario 3
+|Custom role: NF Operator
+|10 min
+|Jose
+
+|Scenario 4
+|Platform auditor: see everything, change nothing
+|7 min
+|Jose
+
+|Scenario 5
+|CI/CD service account: defined blast radius
+|8 min
+|Jose
+
+|Scenario 6
+|Observability: cross-tenant access
+|8 min
+|Jose
+
+|Scenario 7
+|Default system groups + live hardening
+|6 min
+|Jose
+
+|Scenario 8
+|Resource quotas: RBAC's missing half
+|7 min
+|Jose
+
+|Scenario 9
+|Aggregated ClusterRoles
+|8 min
+|Jose
+
+|Scenario 10
+|Audit log: the compliance trail
+|5 min
+|Both
+
+|*Total*
+|
+|*~90 min*
+|
+|===
+
+[NOTE]
+====
+Do not compress Scenarios 7-10. Quotas, system groups, aggregation, and audit logs separate teams that understand RBAC from teams that can only copy-paste YAML. These are often the scenarios that resonate most with compliance and security stakeholders in the audience.
+====
+
+== Products and versions
+
+[cols="3,1"]
+|===
+|Product |Version
+
+|Red Hat OpenShift Container Platform
+|4.16+
+
+|OpenShift CLI (`oc`)
+|Matching cluster version
+|===
+
+All RBAC features demonstrated are stable across OCP 4.16 and later. No Technology Preview features are used.
+
+== Environment URLs
+
+[cols="2,2"]
+|===
+|Resource |URL
+
+|OpenShift web console
+|`{openshift_console_url}`
+
+|OpenShift API server
+|`{openshift_api_url}`
+|===
+
+== Demo user credentials
+
+All demo users share the password `MobileCore2026!`.
+
+[cols="2,2,2,3"]
+|===
+|Username |Group |Namespace scope |Role description
+
+|`platform-admin`
+|`platform-admins`
+|Cluster-wide
+|cluster-admin equivalent. Owns the demo setup.
+
+|`platform-auditor`
+|`platform-auditors`
+|Cluster-wide (read only)
+|Custom `cluster-auditor` role: reads everything except Secrets.
+
+|`cp-admin`
+|`cp-admins`
+|`nf-control-plane`
+|Namespace admin. Can delegate access, cannot escalate beyond own permissions.
+
+|`cp-developer`
+|`cp-developers`
+|`nf-control-plane`
+|`edit` access. Can read Secrets (contrast with auditor in Scenario 4).
+
+|`cp-operator`
+|(direct binding, no group)
+|`nf-control-plane`
+|Custom `nf-operator` role: can scale deployments, cannot delete or read Secrets.
+
+|`cp-viewer`
+|`cp-viewers`
+|`nf-control-plane`
+|`view` access. Used in Scenario 9 to demonstrate role aggregation.
+
+|`up-developer`
+|`up-developers`
+|`nf-user-plane`
+|`edit` access in user-plane namespace only.
+
+|`obs-engineer`
+|`obs-engineers`
+|`observability` + cross-namespace read
+|`edit` in observability; cross-namespace read via `cross-ns-reader` ClusterRole.
+
+|`obs-viewer`
+|`obs-viewers`
+|`observability`
+|`view` access in observability namespace only.
+
+|`pipeline-sa`
+|(ServiceAccount)
+|`nf-control-plane`
+|Custom `cicd-deployer` role: update deployments only. No delete, no Secret access.
+|===
+
+[NOTE]
+====
+`cp-operator` is the only human user with a direct RoleBinding instead of a Group membership. This is intentional -- Scenario 3 uses this to demonstrate why groups are always preferable for human users.
+====
+
+== Pre-flight checklist
+
+Run these before starting the demo:
+
+[source,bash]
+----
+cd rbac-demo/
+./scripts/deploy.sh
+./scripts/validate.sh   # must exit 0 before starting
+----
+
+Then open the web console and navigate to: *Administrator -> User Management -> RoleBindings*
+
+Confirm workloads are running:
+
+[source,bash]
+----
+oc get pods -n nf-control-plane
+oc get pods -n nf-user-plane
+oc get pods -n observability
+----
+
+== Troubleshooting common issues
+
+*OAuth not applied / users cannot log in*
+
+The OAuth patch in `scripts/deploy.sh` requires a cluster restart of the OAuth server. If users see "Invalid credentials," run:
+
+[source,bash]
+----
+oc rollout restart deployment/oauth-openshift -n openshift-authentication
+oc rollout status deployment/oauth-openshift -n openshift-authentication
+----
+
+Then wait 60 seconds before retrying login.
+
+*`validate.sh` fails with missing bindings*
+
+The Kustomize deployment must complete fully before bindings resolve. Re-run:
+
+[source,bash]
+----
+oc apply -k install/
+sleep 30
+./scripts/validate.sh
+----
+
+*Workloads not running (ImagePullBackOff)*
+
+The demo uses UBI images from `registry.access.redhat.com`. Confirm the cluster has outbound internet access, or pre-pull and mirror the images to an internal registry.
+
+*`oc adm node-logs` returns no output (Scenario 10)*
+
+Audit logging is enabled by default on OCP 4.16+. If the command returns nothing, wait 60 seconds after running some `oc` commands as demo users to generate log entries, then retry.
+
+*`self-provisioners` patch cannot be undone*
+
+The cleanup script restores `self-provisioners` from the backup. If Scenario 7 fails mid-way, restore manually:
+
+[source,bash]
+----
+oc patch clusterrolebinding self-provisioners \
+  --type=json \
+  -p '[{"op":"replace","path":"/subjects","value":[{"apiGroup":"rbac.authorization.k8s.io","kind":"Group","name":"system:authenticated:oauth"}]}]'
+----
+
+== Follow-up resources
+
+* https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/authentication_and_authorization/using-rbac[OpenShift RBAC documentation]
+* https://docs.redhat.com/en/documentation/openshift_container_platform/4.16/html/security_and_compliance[OpenShift security and compliance guide]
+* https://www.redhat.com/en/resources/openshift-security-guide-ebook[OpenShift Security Guide (eBook)]
+
+== Authors and contact information
+
+For questions or feedback about this demo content:
+
+* Slack: `#openshift-demos`
+* Demo repository: `jlmayorga/openshift-demos`
+
+For technical issues with the Red Hat Demo Platform environment:
+
+* Slack: `#rhpds-help`
